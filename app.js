@@ -1,6 +1,5 @@
 /*******************************************************
- * FRONTEND FINANZAS
- * Conecta con Apps Script publicado como Web App
+ * FRONTEND FINANZAS - v2 (robusto) + PWA
  *******************************************************/
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbxQmopKqPn1R51brBtmdlS-ECo7tj7fNF9Ym99FyY6Ndv4BmnTKkp_BiQLLZx3fObsa/exec';
@@ -10,6 +9,26 @@ const $   = id => document.getElementById(id);
 const fmt = n => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+/********************* LOG Y ERRORES *********************/
+
+function log(msg, data) {
+  console.log('[Finanzas]', msg, data !== undefined ? data : '');
+}
+
+function mostrarError(msg) {
+  console.error('[Finanzas ERROR]', msg);
+  let bar = document.getElementById('error-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'error-bar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#7f1d1d;color:#fff;padding:10px 16px;font-family:monospace;font-size:13px;z-index:9999;border-top:2px solid #f87171';
+    document.body.appendChild(bar);
+  }
+  bar.textContent = '⚠️ ' + msg;
+}
+
+/********************* HELPERS FECHAS *********************/
 
 function mesActual() {
   const d = new Date();
@@ -32,6 +51,7 @@ function fechaBonita(iso) {
 /********************* API *********************/
 
 async function api(accion, payload = {}) {
+  log('→ API:', accion, payload);
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -39,31 +59,55 @@ async function api(accion, payload = {}) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow'
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      mostrarError('Respuesta no-JSON de la API: ' + text.slice(0, 200));
+      return { ok: false, error: 'Respuesta inválida' };
+    }
+    log('← API:', accion, data);
     marcarEstado(data.ok ? 'ok' : 'error');
     return data;
   } catch (e) {
+    log('✗ Error fetch:', e.message);
     marcarEstado('error');
+    mostrarError('Error de conexión con la API: ' + e.message);
     return { ok: false, error: e.message };
   }
 }
 
 function marcarEstado(estado) {
   const el = $('estadoApi');
+  if (!el) return;
   el.className = estado;
   el.title = estado === 'ok' ? 'Conectado' : 'Error de conexión';
 }
 
 /********************* TABS *********************/
 
-document.querySelectorAll('.tabs button').forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('activa'));
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('activa'));
-    btn.classList.add('activa');
-    $('tab-' + btn.dataset.tab).classList.add('activa');
-  };
-});
+function initTabs() {
+  const botones = document.querySelectorAll('.tabs button');
+  log('Tabs encontrados:', botones.length);
+
+  botones.forEach(btn => {
+    btn.addEventListener('click', () => {
+      log('Click tab:', btn.dataset.tab);
+
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('activa'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('activa'));
+
+      btn.classList.add('activa');
+      const target = document.getElementById('tab-' + btn.dataset.tab);
+      if (target) {
+        target.classList.add('activa');
+      } else {
+        mostrarError('No existe el panel #tab-' + btn.dataset.tab);
+      }
+    });
+  });
+}
 
 /********************* CATEGORÍAS *********************/
 
@@ -73,34 +117,46 @@ async function cargarCategorias() {
   const r = await api('obtenerCategorias');
   if (!r.ok) return;
   categorias = r.categorias || [];
+  log('Categorías cargadas:', categorias.length);
   actualizarSelectCategorias();
   renderCategorias();
 }
 
 function actualizarSelectCategorias() {
-  const tipo = $('tx-tipo').value;
+  const selTipo = $('tx-tipo');
+  const selCat  = $('tx-categoria');
+  if (!selTipo || !selCat) return;
+
+  const tipo = selTipo.value;
   const cats = [...new Set(
     categorias.filter(c => c['Tipo'] === tipo).map(c => c['Categoría'])
   )];
-  $('tx-categoria').innerHTML = cats.length
+  selCat.innerHTML = cats.length
     ? cats.map(c => `<option>${c}</option>`).join('')
     : '<option value="">—</option>';
   actualizarSubcategorias();
 }
 
 function actualizarSubcategorias() {
-  const tipo = $('tx-tipo').value;
-  const cat  = $('tx-categoria').value;
+  const selTipo = $('tx-tipo');
+  const selCat  = $('tx-categoria');
+  const selSub  = $('tx-subcategoria');
+  if (!selTipo || !selCat || !selSub) return;
+
+  const tipo = selTipo.value;
+  const cat  = selCat.value;
   const subs = categorias
     .filter(c => c['Tipo'] === tipo && c['Categoría'] === cat)
     .map(c => c['Subcategoría'])
     .filter(s => s && s !== '—');
-  $('tx-subcategoria').innerHTML = '<option value="">—</option>' +
+  selSub.innerHTML = '<option value="">—</option>' +
     subs.map(s => `<option>${s}</option>`).join('');
 }
 
 function renderCategorias() {
   const cont = $('listaCategorias');
+  if (!cont) return;
+
   if (!categorias.length) {
     cont.innerHTML = '<p class="vacio">No hay categorías cargadas</p>';
     return;
@@ -132,142 +188,165 @@ function renderCategorias() {
   cont.innerHTML = html;
 }
 
-$('tx-tipo').onchange = actualizarSelectCategorias;
-$('tx-categoria').onchange = actualizarSubcategorias;
-
 /********************* FORM TRANSACCIÓN *********************/
 
-$('tx-fecha').valueAsDate = new Date();
+function initFormTx() {
+  const form = $('formTx');
+  if (!form) { mostrarError('No existe #formTx'); return; }
 
-$('formTx').onsubmit = async (e) => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  btn.disabled = true;
+  const fechaInput = $('tx-fecha');
+  if (fechaInput) fechaInput.valueAsDate = new Date();
 
-  const fecha = $('tx-fecha').value;
-  const payload = {
-    fecha,
-    mes: mesDeFecha(fecha),
-    tipo: $('tx-tipo').value,
-    categoria: $('tx-categoria').value,
-    subcategoria: $('tx-subcategoria').value,
-    descripcion: $('tx-descripcion').value,
-    montoAprox: +$('tx-aprox').value || 0,
-    montoReal: +$('tx-real').value || 0,
-    metodoPago: $('tx-metodo').value,
-    estado: $('tx-estado').value,
-    notas: $('tx-notas').value
-  };
+  const selTipo = $('tx-tipo');
+  const selCat  = $('tx-categoria');
+  if (selTipo) selTipo.addEventListener('change', actualizarSelectCategorias);
+  if (selCat)  selCat.addEventListener('change', actualizarSubcategorias);
 
-  $('tx-msg').textContent = 'Guardando...';
-  $('tx-msg').style.color = 'var(--text-dim)';
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    if (btn) btn.disabled = true;
 
-  const r = await api('agregarTransaccion', payload);
+    const fecha = $('tx-fecha').value;
+    const payload = {
+      fecha,
+      mes: mesDeFecha(fecha),
+      tipo: $('tx-tipo').value,
+      categoria: $('tx-categoria').value,
+      subcategoria: $('tx-subcategoria').value,
+      descripcion: $('tx-descripcion').value,
+      montoAprox: +$('tx-aprox').value || 0,
+      montoReal: +$('tx-real').value || 0,
+      metodoPago: $('tx-metodo').value,
+      estado: $('tx-estado').value,
+      notas: $('tx-notas').value
+    };
 
-  $('tx-msg').textContent = r.ok ? '✅ Guardado' : '❌ ' + (r.error || 'Error');
-  $('tx-msg').style.color = r.ok ? 'var(--green)' : 'var(--red)';
-  btn.disabled = false;
+    const msg = $('tx-msg');
+    if (msg) { msg.textContent = 'Guardando...'; msg.style.color = 'var(--text-dim)'; }
 
-  if (r.ok) {
-    e.target.reset();
-    $('tx-fecha').valueAsDate = new Date();
-    actualizarSelectCategorias();
-    await cargarTodo();
-    setTimeout(() => { $('tx-msg').textContent = ''; }, 3000);
-  }
-};
+    const r = await api('agregarTransaccion', payload);
+
+    if (msg) {
+      msg.textContent = r.ok ? '✅ Guardado' : '❌ ' + (r.error || 'Error');
+      msg.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+    }
+    if (btn) btn.disabled = false;
+
+    if (r.ok) {
+      form.reset();
+      if (fechaInput) fechaInput.valueAsDate = new Date();
+      actualizarSelectCategorias();
+      await cargarTodo();
+      setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
+    }
+  });
+}
 
 /********************* FORM PASIVO *********************/
 
-$('formPasivo').onsubmit = async (e) => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  btn.disabled = true;
+function initFormPasivo() {
+  const form = $('formPasivo');
+  if (!form) { mostrarError('No existe #formPasivo'); return; }
 
-  const payload = {
-    tipoPasivo: $('pv-tipo').value,
-    acreedor: $('pv-acreedor').value,
-    descripcion: $('pv-descripcion').value,
-    montoOriginal: +$('pv-original').value || 0,
-    saldoActual: +$('pv-saldo').value || 0,
-    cuotaMensual: +$('pv-cuota').value || 0,
-    tasa: +$('pv-tasa').value || 0,
-    tipoTasa: $('pv-tipoTasa').value,
-    cuotasTotales: +$('pv-total').value || 0,
-    cuotasPagas: +$('pv-pagas').value || 0,
-    vencimiento: $('pv-vencimiento').value,
-    prioridad: $('pv-prioridad').value
-  };
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    if (btn) btn.disabled = true;
 
-  $('pv-msg').textContent = 'Guardando...';
-  $('pv-msg').style.color = 'var(--text-dim)';
+    const payload = {
+      tipoPasivo: $('pv-tipo').value,
+      acreedor: $('pv-acreedor').value,
+      descripcion: $('pv-descripcion').value,
+      montoOriginal: +$('pv-original').value || 0,
+      saldoActual: +$('pv-saldo').value || 0,
+      cuotaMensual: +$('pv-cuota').value || 0,
+      tasa: +$('pv-tasa').value || 0,
+      tipoTasa: $('pv-tipoTasa').value,
+      cuotasTotales: +$('pv-total').value || 0,
+      cuotasPagas: +$('pv-pagas').value || 0,
+      vencimiento: $('pv-vencimiento').value,
+      prioridad: $('pv-prioridad').value
+    };
 
-  const r = await api('agregarPasivo', payload);
+    const msg = $('pv-msg');
+    if (msg) { msg.textContent = 'Guardando...'; msg.style.color = 'var(--text-dim)'; }
 
-  $('pv-msg').textContent = r.ok ? `✅ Pasivo guardado (${r.id})` : '❌ ' + (r.error || 'Error');
-  $('pv-msg').style.color = r.ok ? 'var(--green)' : 'var(--red)';
-  btn.disabled = false;
+    const r = await api('agregarPasivo', payload);
 
-  if (r.ok) {
-    e.target.reset();
-    await cargarTodo();
-    setTimeout(() => { $('pv-msg').textContent = ''; }, 4000);
-  }
-};
+    if (msg) {
+      msg.textContent = r.ok ? `✅ Pasivo guardado (${r.id})` : '❌ ' + (r.error || 'Error');
+      msg.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+    }
+    if (btn) btn.disabled = false;
+
+    if (r.ok) {
+      form.reset();
+      await cargarTodo();
+      setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+    }
+  });
+}
 
 /********************* RENDER: RESUMEN *********************/
 
 async function cargarResumen() {
-  const mes = mesActual();
-  const r = await api('obtenerResumen', { mes });
+  const r = await api('obtenerResumen', { mes: mesActual() });
   if (!r.ok) return;
 
-  $('r-ingresos').textContent = fmt(r.ingresos);
-  $('r-gastos').textContent   = fmt(r.gastos);
-  $('r-ahorro').textContent   = fmt(r.ahorro);
-  $('r-ahorro').style.color   = r.ahorro >= 0 ? 'var(--green)' : 'var(--red)';
-  $('r-desvio').textContent   = fmt(r.desvio);
-  $('r-desvio').style.color   = r.desvio > 0 ? 'var(--red)' : 'var(--green)';
-  $('r-deuda').textContent    = fmt(r.pasivos.deudaTotal);
-  $('r-cuota').textContent    = fmt(r.pasivos.cuotaMensualTotal);
-  $('r-ratio').textContent    = r.ratioDeudaIngreso != null ? r.ratioDeudaIngreso + '%' : '—';
-  $('r-pasivos-count').textContent = r.pasivos.cantidad;
+  const setTxt = (id, val, color) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = val;
+    if (color) el.style.color = color;
+  };
 
-  // Categorías de gasto (excluye ingresos y cuentas comunes)
+  setTxt('r-ingresos', fmt(r.ingresos));
+  setTxt('r-gastos', fmt(r.gastos));
+  setTxt('r-ahorro', fmt(r.ahorro), r.ahorro >= 0 ? 'var(--green)' : 'var(--red)');
+  setTxt('r-desvio', fmt(r.desvio), r.desvio > 0 ? 'var(--red)' : 'var(--green)');
+  setTxt('r-deuda', fmt(r.pasivos.deudaTotal));
+  setTxt('r-cuota', fmt(r.pasivos.cuotaMensualTotal));
+  setTxt('r-ratio', r.ratioDeudaIngreso != null ? r.ratioDeudaIngreso + '%' : '—');
+  setTxt('r-pasivos-count', r.pasivos.cantidad);
+
   const cats = Object.entries(r.porCategoria || {})
     .filter(([k, v]) => v > 0 && !['Sueldo','Freelance','Inversiones','Ventas','Reintegros'].includes(k))
     .sort((a, b) => b[1] - a[1]);
 
   const total = cats.reduce((s, [, v]) => s + v, 0) || 1;
+  const contCat = $('r-categorias');
+  if (contCat) {
+    contCat.innerHTML = cats.length
+      ? cats.map(([k, v]) => `
+          <div class="barra-cat">
+            <div class="cat-nombre">
+              <span>${k}</span>
+              <div class="barra"><div style="width:${(v / total * 100).toFixed(1)}%"></div></div>
+            </div>
+            <span class="monto">${fmt(v)}</span>
+          </div>`).join('')
+      : '<p class="vacio">Sin movimientos este mes</p>';
+  }
 
-  $('r-categorias').innerHTML = cats.length
-    ? cats.map(([k, v]) => `
-        <div class="barra-cat">
-          <div class="cat-nombre">
-            <span>${k}</span>
-            <div class="barra"><div style="width:${(v / total * 100).toFixed(1)}%"></div></div>
-          </div>
-          <span class="monto">${fmt(v)}</span>
-        </div>`).join('')
-    : '<p class="vacio">Sin movimientos este mes</p>';
-
-  // Deuda por tipo de pasivo
   const tipos = Object.entries(r.pasivos.deudaPorTipo || {})
     .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1]);
 
   const totalDeuda = tipos.reduce((s, [, v]) => s + v, 0) || 1;
-
-  $('r-deuda-tipos').innerHTML = tipos.length
-    ? tipos.map(([k, v]) => `
-        <div class="barra-cat">
-          <div class="cat-nombre">
-            <span>${k}</span>
-            <div class="barra"><div style="width:${(v / totalDeuda * 100).toFixed(1)}%;background:var(--purple)"></div></div>
-          </div>
-          <span class="monto">${fmt(v)}</span>
-        </div>`).join('')
-    : '<p class="vacio">Sin pasivos activos</p>';
+  const contTipos = $('r-deuda-tipos');
+  if (contTipos) {
+    contTipos.innerHTML = tipos.length
+      ? tipos.map(([k, v]) => `
+          <div class="barra-cat">
+            <div class="cat-nombre">
+              <span>${k}</span>
+              <div class="barra"><div style="width:${(v / totalDeuda * 100).toFixed(1)}%;background:var(--purple)"></div></div>
+            </div>
+            <span class="monto">${fmt(v)}</span>
+          </div>`).join('')
+      : '<p class="vacio">Sin pasivos activos</p>';
+  }
 }
 
 /********************* RENDER: TRANSACCIONES *********************/
@@ -277,8 +356,10 @@ async function cargarTransacciones() {
   if (!r.ok) return;
 
   const ult = (r.transacciones || []).slice(-20).reverse();
+  const cont = $('listaTx');
+  if (!cont) return;
 
-  $('listaTx').innerHTML = ult.length
+  cont.innerHTML = ult.length
     ? ult.map(t => {
         const tipo = t['Tipo'];
         const monto = Number(t['Monto Real']) || 0;
@@ -287,13 +368,9 @@ async function cargarTransacciones() {
           <div class="item">
             <div class="item-info">
               <span class="titulo">${t['Categoría'] || ''}${t['Subcategoría'] ? ' · ' + t['Subcategoría'] : ''}</span>
-              <small>
-                ${fechaBonita(t['Fecha'])} · ${t['Método Pago'] || ''} · ${t['Descripción'] || 'Sin descripción'}
-              </small>
+              <small>${fechaBonita(t['Fecha'])} · ${t['Método Pago'] || ''} · ${t['Descripción'] || 'Sin descripción'}</small>
             </div>
-            <span class="monto ${clase}">
-              ${tipo === 'Gasto' ? '−' : '+'}${fmt(Math.abs(monto))}
-            </span>
+            <span class="monto ${clase}">${tipo === 'Gasto' ? '−' : '+'}${fmt(Math.abs(monto))}</span>
           </div>`;
       }).join('')
     : '<p class="vacio">Sin transacciones cargadas</p>';
@@ -306,8 +383,10 @@ async function cargarPasivos() {
   if (!r.ok) return;
 
   const activos = (r.pasivos || []).filter(p => p['Estado'] === 'Activo');
+  const cont = $('listaPasivos');
+  if (!cont) return;
 
-  $('listaPasivos').innerHTML = activos.length
+  cont.innerHTML = activos.length
     ? activos.map(p => {
         const saldo = Number(p['Saldo Actual']) || 0;
         const cuota = Number(p['Cuota Mensual']) || 0;
@@ -348,21 +427,11 @@ async function cargarTodo() {
   ]);
 }
 
-async function init() {
-  $('mesActual').textContent = 'Mes: ' + mesActual();
-
-  // Ping inicial para verificar conexión
-  await api('ping');
-
-  await cargarCategorias();
-  await cargarTodo();
-}
 /********************* PWA: PROMPT DE INSTALACIÓN *********************/
 
 let deferredPrompt = null;
 
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Chrome/Edge/Android disparan este evento cuando la app es instalable
   e.preventDefault();
   deferredPrompt = e;
   mostrarBotonInstalar();
@@ -376,11 +445,10 @@ function mostrarBotonInstalar() {
   const btn = document.createElement('button');
   btn.id = 'btn-instalar';
   btn.textContent = '⬇️ Instalar app';
-  btn.style.cssText = 'padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:0.85rem;cursor:pointer;font-family:inherit;font-weight:600';
+  btn.style.cssText = 'padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:0.85rem;cursor:pointer;font-family:inherit;font-weight:600;margin-left:8px';
 
   btn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      // En iOS no hay prompt automático, mostrar instrucciones
       alertarInstruccionesIOS();
       return;
     }
@@ -403,7 +471,6 @@ function alertarInstruccionesIOS() {
   );
 }
 
-// Detectar iOS (Safari no dispara beforeinstallprompt)
 function esIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 }
@@ -413,7 +480,6 @@ function esStandalone() {
          window.navigator.standalone === true;
 }
 
-// Si es iOS y no está instalada, mostrar el botón igual con instrucciones
 if (esIOS() && !esStandalone()) {
   window.addEventListener('load', () => {
     setTimeout(mostrarBotonInstalar, 1000);
@@ -425,4 +491,33 @@ window.addEventListener('appinstalled', () => {
   const btn = document.getElementById('btn-instalar');
   if (btn) btn.remove();
 });
-init();
+
+/********************* INIT *********************/
+
+async function init() {
+  log('🚀 Init frontend');
+
+  // 1) Registrar handlers de UI (siempre primero)
+  initTabs();
+  initFormTx();
+  initFormPasivo();
+
+  const mesEl = $('mesActual');
+  if (mesEl) mesEl.textContent = 'Mes: ' + mesActual();
+
+  // 2) Verificar conexión
+  await api('ping');
+
+  // 3) Cargar datos
+  await cargarCategorias();
+  await cargarTodo();
+
+  log('✅ Frontend listo');
+}
+
+// Esperar a que el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
