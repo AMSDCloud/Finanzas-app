@@ -357,5 +357,72 @@ async function init() {
   await cargarCategorias();
   await cargarTodo();
 }
+/********************* PWA: PROMPT DE INSTALACIÓN *********************/
 
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Chrome/Edge/Android disparan este evento cuando la app es instalable
+  e.preventDefault();
+  deferredPrompt = e;
+  mostrarBotonInstalar();
+});
+
+function mostrarBotonInstalar() {
+  if (document.getElementById('btn-instalar')) return;
+  const header = document.querySelector('header');
+  if (!header) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'btn-instalar';
+  btn.textContent = '⬇️ Instalar app';
+  btn.style.cssText = 'padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:0.85rem;cursor:pointer;font-family:inherit;font-weight:600';
+
+  btn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      // En iOS no hay prompt automático, mostrar instrucciones
+      alertarInstruccionesIOS();
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log('[PWA] Instalación:', outcome);
+    deferredPrompt = null;
+    btn.remove();
+  });
+
+  header.appendChild(btn);
+}
+
+function alertarInstruccionesIOS() {
+  alert(
+    'Para instalar en iPhone/iPad:\n\n' +
+    '1. Tocá el botón Compartir (cuadrado con flecha hacia arriba)\n' +
+    '2. Elegí "Agregar a pantalla de inicio"\n' +
+    '3. Confirmá con "Agregar"'
+  );
+}
+
+// Detectar iOS (Safari no dispara beforeinstallprompt)
+function esIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function esStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
+
+// Si es iOS y no está instalada, mostrar el botón igual con instrucciones
+if (esIOS() && !esStandalone()) {
+  window.addEventListener('load', () => {
+    setTimeout(mostrarBotonInstalar, 1000);
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  console.log('[PWA] App instalada');
+  const btn = document.getElementById('btn-instalar');
+  if (btn) btn.remove();
+});
 init();
