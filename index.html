@@ -20,7 +20,233 @@
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 </head>
 <body>
-  <!-- ... todo el contenido igual ... -->
+  <header>
+    <div class="header-left">
+      <h1>💰 Mis Finanzas</h1>
+      <span id="estadoApi" title="Estado de conexión">●</span>
+    </div>
+    <div class="header-right">
+      <span id="mesActual"></span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="resumen" class="activa">📊 Resumen</button>
+    <button data-tab="transacciones">💸 Transacciones</button>
+    <button data-tab="pasivos">💳 Pasivos</button>
+    <button data-tab="categorias">🏷️ Categorías</button>
+  </nav>
+
+  <!-- ================= RESUMEN ================= -->
+  <section id="tab-resumen" class="tab activa">
+    <div class="grid">
+      <div class="card ingreso">
+        <span>Ingresos</span>
+        <strong id="r-ingresos">$0</strong>
+      </div>
+      <div class="card gasto">
+        <span>Gastos</span>
+        <strong id="r-gastos">$0</strong>
+      </div>
+      <div class="card ahorro">
+        <span>Ahorro</span>
+        <strong id="r-ahorro">$0</strong>
+      </div>
+      <div class="card desvio">
+        <span>Desvío (Real − Aprox)</span>
+        <strong id="r-desvio">$0</strong>
+      </div>
+      <div class="card deuda">
+        <span>Deuda Total</span>
+        <strong id="r-deuda">$0</strong>
+      </div>
+      <div class="card cuota">
+        <span>Cuotas Mensuales</span>
+        <strong id="r-cuota">$0</strong>
+      </div>
+      <div class="card ratio">
+        <span>Ratio Deuda / Ingreso</span>
+        <strong id="r-ratio">—</strong>
+      </div>
+      <div class="card pasivos-count">
+        <span>Pasivos Activos</span>
+        <strong id="r-pasivos-count">0</strong>
+      </div>
+    </div>
+
+    <div class="seccion">
+      <h3>📈 Gastos por categoría</h3>
+      <div id="r-categorias"></div>
+    </div>
+
+    <div class="seccion">
+      <h3>🏦 Deuda por tipo de pasivo</h3>
+      <div id="r-deuda-tipos"></div>
+    </div>
+  </section>
+
+  <!-- ================= TRANSACCIONES ================= -->
+  <section id="tab-transacciones" class="tab">
+    <form id="formTx" class="formulario">
+      <h3>➕ Nueva transacción</h3>
+
+      <label>Fecha
+        <input type="date" id="tx-fecha" required>
+      </label>
+
+      <label>Tipo
+        <select id="tx-tipo">
+          <option value="Gasto">Gasto</option>
+          <option value="Ingreso">Ingreso</option>
+        </select>
+      </label>
+
+      <label>Categoría
+        <select id="tx-categoria" required></select>
+      </label>
+
+      <label>Subcategoría
+        <select id="tx-subcategoria"></select>
+      </label>
+
+      <label>Descripción
+        <input type="text" id="tx-descripcion" placeholder="Opcional">
+      </label>
+
+      <label>Monto aproximado
+        <input type="number" id="tx-aprox" step="0.01" placeholder="0">
+      </label>
+
+      <label>Monto real
+        <input type="number" id="tx-real" step="0.01" required placeholder="0">
+      </label>
+
+      <label>Método de pago
+        <select id="tx-metodo">
+          <option>Efectivo</option>
+          <option>Débito</option>
+          <option>Crédito</option>
+          <option>Transferencia</option>
+          <option>Mercado Pago</option>
+          <option>Otro</option>
+        </select>
+      </label>
+
+      <label>Estado
+        <select id="tx-estado">
+          <option>Pagado</option>
+          <option>Pendiente</option>
+          <option>Parcial</option>
+        </select>
+      </label>
+
+      <label>Notas
+        <input type="text" id="tx-notas" placeholder="Opcional">
+      </label>
+
+      <button type="submit">Guardar transacción</button>
+      <p id="tx-msg"></p>
+    </form>
+
+    <div class="seccion">
+      <h3>📋 Últimas transacciones</h3>
+      <div id="listaTx"></div>
+    </div>
+  </section>
+
+  <!-- ================= PASIVOS ================= -->
+  <section id="tab-pasivos" class="tab">
+    <form id="formPasivo" class="formulario">
+      <h3>➕ Nuevo pasivo</h3>
+
+      <label>Tipo de pasivo
+        <select id="pv-tipo">
+          <option>Tarjeta de Crédito</option>
+          <option>Préstamo Personal</option>
+          <option>Hipotecario</option>
+          <option>Prendario</option>
+          <option>Deuda Familiar</option>
+          <option>Deuda Comercial</option>
+          <option>Educativo</option>
+          <option>Mora / Refinanciación</option>
+          <option>Otro</option>
+        </select>
+      </label>
+
+      <label>Acreedor
+        <input type="text" id="pv-acreedor" required placeholder="Banco / Persona">
+      </label>
+
+      <label>Descripción
+        <input type="text" id="pv-descripcion" placeholder="Opcional">
+      </label>
+
+      <label>Monto original
+        <input type="number" id="pv-original" step="0.01" required>
+      </label>
+
+      <label>Saldo actual
+        <input type="number" id="pv-saldo" step="0.01" required>
+      </label>
+
+      <label>Cuota mensual
+        <input type="number" id="pv-cuota" step="0.01" required>
+      </label>
+
+      <label>Tasa (%)
+        <input type="number" id="pv-tasa" step="0.01" placeholder="0">
+      </label>
+
+      <label>Tipo tasa
+        <select id="pv-tipoTasa">
+          <option>TNA</option>
+          <option>TEA</option>
+          <option>TEM</option>
+          <option>Sin interés</option>
+        </select>
+      </label>
+
+      <label>Cuotas totales
+        <input type="number" id="pv-total" required>
+      </label>
+
+      <label>Cuotas pagas
+        <input type="number" id="pv-pagas" value="0">
+      </label>
+
+      <label>Vencimiento
+        <input type="date" id="pv-vencimiento">
+      </label>
+
+      <label>Prioridad
+        <select id="pv-prioridad">
+          <option>Alta</option>
+          <option selected>Media</option>
+          <option>Baja</option>
+        </select>
+      </label>
+
+      <button type="submit">Guardar pasivo</button>
+      <p id="pv-msg"></p>
+    </form>
+
+    <div class="seccion">
+      <h3>💳 Pasivos activos</h3>
+      <div id="listaPasivos"></div>
+    </div>
+  </section>
+
+  <!-- ================= CATEGORÍAS ================= -->
+  <section id="tab-categorias" class="tab">
+    <div class="seccion">
+      <h3>🏷️ Categorías configuradas</h3>
+      <p class="ayuda">
+        Para agregar/editar categorías, hacelo directamente en la hoja
+        <code>Categorias</code> de Google Sheets. Se recargan automáticamente acá.
+      </p>
+      <div id="listaCategorias"></div>
+    </div>
+  </section>
 
   <script src="app.js"></script>
 
