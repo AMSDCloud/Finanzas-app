@@ -1,22 +1,19 @@
 /*******************************************************
- * SERVICE WORKER - Mis Finanzas PWA
+ * SERVICE WORKER - Mis Finanzas PWA (tolerante)
  *******************************************************/
 
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.0.1';
 const CACHE_NAME = 'finanzas-' + CACHE_VERSION;
 
-// Archivos del shell de la app (se cachean al instalar)
 const SHELL = [
   './',
   './index.html',
   './style.css',
   './app.js',
-  './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png'
+  './manifest.json'
+  // Los iconos se cachean on-demand cuando se piden
 ];
 
-// Dominio de la API (nunca se cachea)
 const API_HOST = 'script.google.com';
 
 /********************* INSTALL *********************/
@@ -24,9 +21,17 @@ const API_HOST = 'script.google.com';
 self.addEventListener('install', (event) => {
   console.log('[SW] Instalando', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(SHELL))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Cachear uno por uno, sin romper si alguno falla
+      for (const url of SHELL) {
+        try {
+          await cache.add(url);
+          console.log('[SW] ✓ Cacheado:', url);
+        } catch (e) {
+          console.warn('[SW] ✗ No se pudo cachear:', url, e.message);
+        }
+      }
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -49,27 +54,31 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Nunca cachear la API
-  if (url.hostname === API_HOST) {
-    return; // dejar pasar el request sin interceptar
-  }
+  // Nunca interceptar la API
+  if (url.hostname === API_HOST) return;
 
-  // Solo manejar GET
+  // Solo GET
   if (event.request.method !== 'GET') return;
 
-  // Estrategia: network-first para HTML/JS/CSS (siempre lo más nuevo),
-  // cache fallback si está offline
+  // No cachear chrome-extension://, etc.
+  if (!url.protocol.startsWith('http')) return;
+
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Guardar copia en cache
-        if (response && response.status === 200 && url.origin === location.origin) {
+        // Cachear respuesta válida del mismo origen
+        if (response && response.status === 200 &&
+            response.type === 'basic' && url.origin === location.origin) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then(r => r || caches.match('./index.html')))
+      .catch(() => 
+        caches.match(event.request).then(r => 
+          r || (event.request.mode === 'navigate' ? caches.match('./index.html') : undefined)
+        )
+      )
   );
 });
 
