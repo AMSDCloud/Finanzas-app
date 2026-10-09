@@ -28,6 +28,53 @@ function mostrarError(msg) {
   bar.textContent = '⚠️ ' + msg;
 }
 
+/********************* DIAGNÓSTICO *********************/
+
+async function diagnostico() {
+  log('========== DIAGNÓSTICO ==========');
+  
+  // 1) Ver qué mes cree que es "actual"
+  const mes = mesActual();
+  log('Mes actual según la app:', mes);
+  
+  // 2) Ver qué transacciones hay (sin filtro)
+  const rTx = await api('obtenerTransacciones', {});
+  log('Total transacciones en la hoja:', rTx.transacciones?.length || 0);
+  
+  if (rTx.transacciones?.length) {
+    const primeras = rTx.transacciones.slice(0, 5);
+    primeras.forEach((t, i) => {
+      log('Tx ' + (i+1) + ':', {
+        Fecha: String(t['Fecha']),
+        Mes: String(t['Mes']),
+        Tipo: t['Tipo'],
+        Categoria: t['Categoría'],
+        MontoReal: t['Monto Real']
+      });
+    });
+  }
+  
+  // 3) Ver el resumen con filtro por mes actual
+  const rResumen = await api('obtenerResumen', { mes });
+  log('Resumen CON filtro ' + mes + ':', {
+    ingresos: rResumen.ingresos,
+    gastos: rResumen.gastos,
+    ahorro: rResumen.ahorro
+  });
+  
+  // 4) Ver el resumen sin filtro
+  const rResumenTodos = await api('obtenerResumen', {});
+  log('Resumen SIN filtro:', {
+    ingresos: rResumenTodos.ingresos,
+    gastos: rResumenTodos.gastos,
+    ahorro: rResumenTodos.ahorro
+  });
+  
+  log('========== FIN DIAGNÓSTICO ==========');
+}
+
+// Ejecutar después de 2 segundos de cargada la app
+setTimeout(diagnostico, 2000);
 /********************* HELPERS FECHAS *********************/
 
 function mesActual() {
